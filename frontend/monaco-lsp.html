@@ -1,0 +1,60 @@
+<!--
+  This is a minimal example of using Monaco Editor with LSP support in the browser.
+  You need to:
+    1. Serve this file (and dependencies) via a local web server.
+    2. Start your LSP server and a WebSocket bridge (see LSP_SETUP.md).
+    3. Install dependencies: monaco-editor, monaco-languageclient, vscode-ws-jsonrpc, and ws (for the bridge).
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bengali Editor with LSP</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    html, body, #container { height: 100%; margin: 0; padding: 0; }
+    #container { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <script src="https://unpkg.com/monaco-editor@0.44.0/min/vs/loader.js"></script>
+  <script src="https://unpkg.com/monaco-languageclient@0.15.0/lib/monaco-languageclient.js"></script>
+  <script src="https://unpkg.com/vscode-ws-jsonrpc@1.0.2/lib/index.js"></script>
+  <script>
+    require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      const editor = monaco.editor.create(document.getElementById('container'), {
+        value: '',
+        language: 'plaintext',
+        fontFamily: 'Noto Sans Bengali, sans-serif',
+        fontSize: 18,
+        theme: 'vs-light',
+        minimap: { enabled: false }
+      });
+
+      // Connect to LSP server via WebSocket
+      const url = 'ws://localhost:3001'; // Your LSP WebSocket bridge
+      const webSocket = new WebSocket(url);
+      webSocket.onopen = () => {
+        const { MonacoLanguageClient, CloseAction, ErrorAction, createConnection } = window.monacoLanguageClient;
+        const languageClient = new MonacoLanguageClient({
+          name: 'Bengali LSP',
+          clientOptions: {
+            documentSelector: ['plaintext'],
+            errorHandler: {
+              error: () => ErrorAction.Continue,
+              closed: () => CloseAction.Restart,
+            },
+          },
+          connectionProvider: {
+            get: () => Promise.resolve(createConnection(webSocket)),
+          },
+        });
+        languageClient.start();
+        webSocket.onclose = () => languageClient.stop();
+      };
+    });
+  </script>
+</body>
+</html>
