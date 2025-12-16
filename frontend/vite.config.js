@@ -17,5 +17,10 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true
+  },
+  resolve: {
+    alias: {
+      '@codingame/monaco-vscode-api/vscode/vs': '@codingame/monaco-vscode-api/vscode/src/vs'
+    }
   }
 });

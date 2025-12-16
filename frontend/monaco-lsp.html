@@ -19,9 +19,9 @@
 <body>
   <div id="container"></div>
   <script type="module">
-    import * as monaco from 'https://unpkg.com/monaco-editor@0.44.0/min/monaco-editor-core.js';
-    import { MonacoLanguageClient, CloseAction, ErrorAction, createConnection } from 'https://unpkg.com/monaco-languageclient@0.15.0/lib/monaco-languageclient.js';
-    import * as rpc from 'https://unpkg.com/vscode-ws-jsonrpc@1.0.2/lib/index.js';
+    import * as monaco from 'monaco-editor';
+    import { MonacoLanguageClient, CloseAction, ErrorAction, createConnection } from 'monaco-languageclient';
+    import * as rpc from 'vscode-ws-jsonrpc';
 
     const editor = monaco.editor.create(document.getElementById('container'), {
       value: '',
