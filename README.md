@@ -53,7 +53,7 @@ Open two Git Bash terminals:
 ```bash
 cd backend
 source .venv/Scripts/activate
-python main.py
+uvicorn main:app --reload --port 8000
 ```
 *Wait for: "BanglaT5 model loaded successfully!" (~900MB download on first run)*
 

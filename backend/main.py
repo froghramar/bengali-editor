@@ -5,7 +5,7 @@ Bengali Text Auto-completion Backend
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForCausalLM
 import torch
 from typing import List
 import logging
@@ -62,9 +62,9 @@ async def load_model():
         logger.info(f"Using device: {device}")
         
         # Load tokenizer and model
-        model_name = "csebuetnlp/banglat5"
+        model_name = "bigscience/bloom-560m"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
         model.to(device)
         model.eval()  # Set to evaluation mode
         
@@ -108,7 +108,6 @@ async def get_completions(request: CompletionRequest):
             return CompletionResponse(suggestions=[], input_text=input_text)
         
         # T5 approach 1: Use task prefix for completion
-        # This tells T5 we want it to complete the text
         task_input = f"Complete: {input_text}"
         
         # Tokenize input
@@ -141,19 +140,22 @@ async def get_completions(request: CompletionRequest):
         for output in outputs:
             # Decode the generated text
             generated_text = tokenizer.decode(output, skip_special_tokens=True)
+            logger.info(f"Raw generated text: {generated_text}")
             
             # Clean up the suggestion
             suggestion = generated_text.strip()
             
             # Remove the input text if it's repeated
-            if suggestion.startswith(input_text):
-                suggestion = suggestion[len(input_text):].strip()
+            if suggestion.startswith(task_input):
+               suggestion = suggestion.removeprefix(task_input).strip()
+
+            # suggestions.append(suggestion)
             
             # Take first few words as suggestion (not the entire generation)
             words = suggestion.split()
             if words:
-                # Suggest 1-4 words depending on context
-                word_count = min(4, len(words))
+                # Suggest 1-10 words depending on context
+                word_count = min(10, len(words))
                 suggestion = ' '.join(words[:word_count])
                 
                 if suggestion and suggestion not in suggestions:
