@@ -33,6 +33,7 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     lsp.kill();
+    console.log('WebSocket client disconnected');
   });
 
   lsp.on('exit', (code) => {
