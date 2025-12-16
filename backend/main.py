@@ -1,6 +1,5 @@
 """
 Bengali Text Auto-completion Backend
-Uses csebuetnlp/banglat5 for context-aware suggestions
 """
 
 from fastapi import FastAPI, HTTPException
@@ -16,7 +15,7 @@ import re
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Bengali Auto-completion API with BanglaT5")
+app = FastAPI(title="Bengali Auto-completion API")
 
 # CORS middleware for frontend access
 app.add_middleware(
@@ -52,11 +51,11 @@ def normalize_bengali_text(text):
 
 @app.on_event("startup")
 async def load_model():
-    """Load BanglaT5 model on startup"""
+    """Load model on startup"""
     global model, tokenizer, device
     
     try:
-        logger.info("Loading BanglaT5 model...")
+        logger.info("Loading model...")
         
         # Check for GPU availability
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,7 +68,7 @@ async def load_model():
         model.to(device)
         model.eval()  # Set to evaluation mode
         
-        logger.info("BanglaT5 model loaded successfully!")
+        logger.info("Model loaded successfully!")
         logger.info(f"Model vocabulary size: {len(tokenizer)}")
         
     except Exception as e:
@@ -81,9 +80,7 @@ async def root():
     """Health check endpoint"""
     return {
         "status": "running",
-        "model": "csebuetnlp/banglat5",
-        "device": str(device),
-        "model_type": "T5 (Seq2Seq)"
+        "device": str(device)
     }
 
 @app.post("/complete", response_model=CompletionResponse)
@@ -112,7 +109,7 @@ async def get_completions(request: CompletionRequest):
         
         # T5 approach 1: Use task prefix for completion
         # This tells T5 we want it to complete the text
-        task_input = f"সম্পূর্ণ করুন: {input_text}"
+        task_input = f"Complete: {input_text}"
         
         # Tokenize input
         input_ids = tokenizer.encode(
@@ -176,109 +173,6 @@ async def get_completions(request: CompletionRequest):
         logger.error(f"Error generating completions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/complete-word")
-async def complete_word(request: CompletionRequest):
-    """
-    Specialized endpoint for single word completion using T5's masked approach
-    """
-    if model is None or tokenizer is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-    
-    try:
-        input_text = normalize_bengali_text(request.text.strip())
-        
-        if not input_text:
-            return CompletionResponse(suggestions=[], input_text=input_text)
-        
-        # For T5, we can use a fill-in-the-blank approach
-        # Add a mask token for the model to predict
-        task_input = f"পূরণ করুন: {input_text} <extra_id_0>"
-        
-        # Tokenize
-        input_ids = tokenizer.encode(
-            task_input,
-            return_tensors="pt",
-            max_length=512,
-            truncation=True
-        ).to(device)
-        
-        # Generate with shorter max length for word completion
-        with torch.no_grad():
-            outputs = model.generate(
-                input_ids,
-                max_length=15,
-                num_beams=request.max_suggestions * 2,
-                num_return_sequences=request.max_suggestions,
-                temperature=0.7,
-                early_stopping=True,
-                no_repeat_ngram_size=2
-            )
-        
-        suggestions = []
-        for output in outputs:
-            generated = tokenizer.decode(output, skip_special_tokens=True)
-            
-            # Extract just the filled word
-            words = generated.split()
-            if words:
-                first_word = words[0]
-                if first_word and first_word not in suggestions:
-                    suggestions.append(first_word)
-        
-        return CompletionResponse(
-            suggestions=suggestions[:request.max_suggestions],
-            input_text=input_text
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in word completion: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/correct")
-async def correct_text(request: CompletionRequest):
-    """
-    Grammar correction endpoint using BanglaT5
-    T5 models excel at text correction tasks
-    """
-    if model is None or tokenizer is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-    
-    try:
-        input_text = normalize_bengali_text(request.text.strip())
-        
-        if not input_text:
-            return CompletionResponse(suggestions=[], input_text=input_text)
-        
-        # Use correction task prefix
-        task_input = f"সংশোধন করুন: {input_text}"
-        
-        input_ids = tokenizer.encode(
-            task_input,
-            return_tensors="pt",
-            max_length=512,
-            truncation=True
-        ).to(device)
-        
-        with torch.no_grad():
-            outputs = model.generate(
-                input_ids,
-                max_length=input_ids.shape[1] + 20,
-                num_beams=3,
-                num_return_sequences=1,
-                temperature=0.5,
-                early_stopping=True
-            )
-        
-        corrected_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        return CompletionResponse(
-            suggestions=[corrected_text],
-            input_text=input_text
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in text correction: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
