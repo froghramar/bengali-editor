@@ -1,0 +1,7 @@
+### Test Bengali autocomplete endpoint
+POST http://localhost:8000/complete
+Content-Type: application/json
+
+{
+  "text": "আমি বাংলায়"
+}
