@@ -20,7 +20,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@codingame/monaco-vscode-api/vscode/vs': '@codingame/monaco-vscode-api/vscode/src/vs'
+      // '@codingame/monaco-vscode-api/vscode/vs': 'node_modules/@codingame/monaco-vscode-api/vscode/src/vs',
+      // '@codingame/monaco-vscode-api/vscode/src/vs/workbench/api/common/extHostTypes': 'node_modules/@codingame/monaco-vscode-api/vscode/src/vs/workbench/api/common/extHostTypes.js',
+      // '@codingame/monaco-vscode-api/vscode/src/vs/base/common/errors': 'node_modules/@codingame/monaco-vscode-api/vscode/src/vs/base/common/errors.js',
     }
   }
 });

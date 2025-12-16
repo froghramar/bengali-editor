@@ -20,8 +20,10 @@
   <div id="container"></div>
   <script type="module">
     import * as monaco from 'monaco-editor';
-    import { MonacoLanguageClient, CloseAction, ErrorAction, createConnection } from 'monaco-languageclient';
+    import { MonacoLanguageClient } from 'monaco-languageclient';
+    import { CloseAction, ErrorAction } from 'vscode-languageserver-protocol';
     import * as rpc from 'vscode-ws-jsonrpc';
+    import { WebSocketMessageReader, WebSocketMessageWriter, toSocket } from "vscode-ws-jsonrpc";
 
     const editor = monaco.editor.create(document.getElementById('container'), {
       value: '',
@@ -34,6 +36,9 @@
 
     const url = 'ws://localhost:3001'; // Your LSP WebSocket bridge
     const webSocket = new WebSocket(url);
+    const reader = new WebSocketMessageReader(toSocket(webSocket));
+    const writer = new WebSocketMessageWriter(toSocket(webSocket));
+
     webSocket.onopen = () => {
       const languageClient = new MonacoLanguageClient({
         name: 'Bengali LSP',
@@ -45,8 +50,11 @@
           },
         },
         connectionProvider: {
-          get: () => Promise.resolve(createConnection(webSocket)),
-        },
+          get: async () => ({
+            reader,
+            writer,
+          })
+        }
       });
       languageClient.start();
       webSocket.onclose = () => languageClient.stop();
