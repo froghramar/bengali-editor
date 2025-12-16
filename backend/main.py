@@ -140,7 +140,6 @@ async def get_completions(request: CompletionRequest):
         for output in outputs:
             # Decode the generated text
             generated_text = tokenizer.decode(output, skip_special_tokens=True)
-            logger.info(f"Raw generated text: {generated_text}")
             
             # Clean up the suggestion
             suggestion = generated_text.strip()
