@@ -1,11 +1,11 @@
 # Bengali Text Editor with AI Auto-completion
 
-A modern Bengali text editor powered by **BanglaT5** for intelligent auto-completion, grammar correction, and context-aware suggestions.
+A modern Bengali text editor powered by **bigscience/bloom-560m** for intelligent auto-completion and context-aware suggestions.
 
 ## ✨ Features
 
-- 🤖 AI-powered auto-completion using BanglaT5 model
-- ✍️ Grammar correction and context-aware suggestions
+- 🤖 AI-powered auto-completion using bigscience/bloom-560m model
+- Context-aware suggestions
 - ⌨️ Keyboard navigation (↑↓ arrows, Enter, Esc)
 - 💾 Save/export documents
 - 🎨 Modern dark-themed UI
@@ -55,7 +55,7 @@ cd backend
 source .venv/Scripts/activate
 uvicorn main:app --reload --port 8000
 ```
-*Wait for: "BanglaT5 model loaded successfully!" (~900MB download on first run)*
+*Wait for: "bloom-560m model loaded successfully!" (~1.7GB download on first run)*
 
 **Terminal 2 - Frontend:**
 ```bash
@@ -70,7 +70,7 @@ python -m http.server 3000
 ```
 bengali-editor/
 ├── backend/
-│   ├── main.py              # FastAPI + BanglaT5
+│   ├── main.py              # FastAPI + bigscience/bloom-560m
 │   ├── requirements.txt
 │   ├── .venv/              # Virtual environment
 │   └── .gitignore
@@ -93,7 +93,7 @@ bengali-editor/
 - `GET /` - Health check
 - `POST /complete` - Text completion
 - `POST /complete-word` - Single word completion  
-- `POST /correct` - Grammar correction
+
 
 **Test with curl (in Git Bash):**
 ```bash
@@ -152,7 +152,7 @@ echo "alias python3=python" >> ~/.bashrc
 
 | Metric | Value |
 |--------|-------|
-| Model | BanglaT5 (~900MB) |
+| Model | bigscience/bloom-560m (~1.7GB) |
 | First Request | 3-5s (model load) |
 | CPU | 1-2s per request |
 | GPU | 200-400ms |
@@ -177,10 +177,10 @@ Update `API_URL` in `index.html` to your backend domain.
 
 ## 📚 Documentation
 
-- **Backend artifact**: Full FastAPI code with BanglaT5
+- **Backend artifact**: Full FastAPI code with bigscience/bloom-560m
 - **Frontend artifact**: Complete HTML/React editor
 - **API docs**: http://localhost:8000/docs (auto-generated when running)
-- **BanglaT5 model**: [HuggingFace](https://huggingface.co/csebuetnlp/banglat5)
+- **bloom-560m model**: [HuggingFace](https://huggingface.co/bigscience/bloom-560m)
 
 ## 🎓 Development Notes
 
