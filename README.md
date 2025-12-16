@@ -1,10 +1,10 @@
 # Bengali Text Editor with AI Auto-completion
 
-A modern Bengali text editor powered by **bigscience/bloom-560m** for intelligent auto-completion and context-aware suggestions.
+A modern Bengali text editor powered by an AI language model for intelligent auto-completion and context-aware suggestions.
 
 ## ✨ Features
 
-- 🤖 AI-powered auto-completion using bigscience/bloom-560m model
+- 🤖 AI-powered auto-completion using an AI language model
 - Context-aware suggestions
 - ⌨️ Keyboard navigation (↑↓ arrows, Enter, Esc)
 - 💾 Save/export documents
@@ -55,7 +55,7 @@ cd backend
 source .venv/Scripts/activate
 uvicorn main:app --reload --port 8000
 ```
-*Wait for: "bloom-560m model loaded successfully!" (~1.7GB download on first run)*
+*Wait for: "Model loaded successfully!" (first run may take time to download)*
 
 **Terminal 2 - Frontend:**
 ```bash
@@ -70,7 +70,7 @@ python -m http.server 3000
 ```
 bengali-editor/
 ├── backend/
-│   ├── main.py              # FastAPI + bigscience/bloom-560m
+│   ├── main.py              # FastAPI + AI model
 │   ├── requirements.txt
 │   ├── .venv/              # Virtual environment
 │   └── .gitignore
@@ -148,16 +148,6 @@ python --version
 echo "alias python3=python" >> ~/.bashrc
 ```
 
-## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| Model | bigscience/bloom-560m (~1.7GB) |
-| First Request | 3-5s (model load) |
-| CPU | 1-2s per request |
-| GPU | 200-400ms |
-| Memory | 2-3GB RAM |
-
 ## 🚀 Production Deployment
 
 ### Backend
@@ -177,10 +167,9 @@ Update `API_URL` in `index.html` to your backend domain.
 
 ## 📚 Documentation
 
-- **Backend artifact**: Full FastAPI code with bigscience/bloom-560m
+- **Backend artifact**: Full FastAPI code with AI model
 - **Frontend artifact**: Complete HTML/React editor
 - **API docs**: http://localhost:8000/docs (auto-generated when running)
-- **bloom-560m model**: [HuggingFace](https://huggingface.co/bigscience/bloom-560m)
 
 ## 🎓 Development Notes
 
