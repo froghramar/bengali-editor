@@ -24,6 +24,7 @@
     import { CloseAction, ErrorAction } from 'vscode-languageserver-protocol';
     import * as rpc from 'vscode-ws-jsonrpc';
     import { WebSocketMessageReader, WebSocketMessageWriter, toSocket } from "vscode-ws-jsonrpc";
+    import { initialize } from "@codingame/monaco-vscode-api";
 
     const editor = monaco.editor.create(document.getElementById('container'), {
       value: '',
@@ -34,6 +35,7 @@
       minimap: { enabled: false }
     });
 
+    await initialize();
     const url = 'ws://localhost:3001'; // Your LSP WebSocket bridge
     const webSocket = new WebSocket(url);
     const reader = new WebSocketMessageReader(toSocket(webSocket));
