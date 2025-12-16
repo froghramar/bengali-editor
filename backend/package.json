@@ -1,0 +1,14 @@
+{
+  "name": "bengali-lsp-bridge",
+  "version": "1.0.0",
+  "description": "WebSocket bridge for Bengali LSP server",
+  "main": "lsp-ws-bridge.js",
+  "scripts": {
+    "start": "node lsp-ws-bridge.js"
+  },
+  "dependencies": {
+    "ws": "^8.15.1"
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "bengali-editor-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "dependencies": {
+    "monaco-editor": "^0.40.0",
+    "monaco-languageclient": "^10.4.0",
+    "vscode-ws-jsonrpc": "^3.5.0"
+  },
+  "devDependencies": {
+    "vite": "^4.0.0"
+  }
+}
