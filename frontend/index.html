@@ -75,6 +75,7 @@
       const [enableComplete, setEnableComplete] = useState(true);
       const textareaRef = useRef(null);
       const debounceTimer = useRef(null);
+      const abortController = useRef(null);
 
       // API configuration
       const API_URL = 'http://localhost:8000';
@@ -157,6 +158,14 @@
           return;
         }
         
+        // Cancel previous request if it exists
+        if (abortController.current) {
+          abortController.current.abort();
+        }
+        
+        // Create new abort controller for this request
+        abortController.current = new AbortController();
+        
         setLoading(true);
         try {
           const endpoint = detection.mode === 'transliterate' ? '/transliterate' : '/complete';
@@ -168,7 +177,8 @@
               text: detection.text,
               max_suggestions: 5,
               max_length: 20
-            })
+            }),
+            signal: abortController.current.signal
           });
           
           if (!response.ok) {
@@ -181,6 +191,11 @@
           setSelectedIndex(0);
           setCurrentMode(detection.mode);
         } catch (error) {
+          // Ignore abort errors (these are expected when cancelling)
+          if (error.name === 'AbortError') {
+            console.log('Request cancelled');
+            return;
+          }
           console.error('Error fetching suggestions:', error);
           setSuggestions([]);
           setShowSuggestions(false);
@@ -192,6 +207,11 @@
       const handleTextChange = (e) => {
         const newText = e.target.value;
         setText(newText);
+
+        // Cancel any ongoing API request
+        if (abortController.current) {
+          abortController.current.abort();
+        }
 
         // Clear previous debounce timer
         if (debounceTimer.current) {
