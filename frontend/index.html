@@ -83,11 +83,31 @@
         try {
           const endpoint = mode === 'transliterate' ? '/transliterate' : '/complete';
           
+          // For transliteration, only send the current word
+          let textToSend = inputText;
+          if (mode === 'transliterate') {
+            const textarea = textareaRef.current;
+            const cursorPos = textarea.selectionStart;
+            const textBeforeCursor = inputText.substring(0, cursorPos);
+            
+            // Extract the current word (text after last space/newline)
+            const words = textBeforeCursor.split(/[\s\n]+/);
+            const currentWord = words[words.length - 1] || '';
+            
+            // Only send if there's a word to transliterate
+            if (!currentWord.trim()) {
+              setLoading(false);
+              return;
+            }
+            
+            textToSend = currentWord;
+          }
+          
           const response = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              text: inputText,
+              text: textToSend,
               max_suggestions: 5,
               max_length: 20
             })
@@ -135,10 +155,34 @@
         }
 
         // Debounce API calls (wait 500ms after user stops typing)
-        if (newText.trim().length > 2) {
-          debounceTimer.current = setTimeout(() => {
-            getSuggestions(newText);
-          }, 500);
+        if (newText.trim().length > 0) {
+          // For transliteration mode, check if there's a current word
+          if (mode === 'transliterate') {
+            const cursorPos = textarea.selectionStart;
+            const textBeforeCursor = newText.substring(0, cursorPos);
+            const words = textBeforeCursor.split(/[\s\n]+/);
+            const currentWord = words[words.length - 1] || '';
+            
+            // Only trigger if current word has at least 1 character
+            if (currentWord.length >= 1) {
+              debounceTimer.current = setTimeout(() => {
+                getSuggestions(newText);
+              }, 500);
+            } else {
+              setShowSuggestions(false);
+              setSuggestions([]);
+            }
+          } else {
+            // For auto-completion, need at least 2 characters
+            if (newText.trim().length > 2) {
+              debounceTimer.current = setTimeout(() => {
+                getSuggestions(newText);
+              }, 500);
+            } else {
+              setShowSuggestions(false);
+              setSuggestions([]);
+            }
+          }
         } else {
           setShowSuggestions(false);
           setSuggestions([]);
@@ -168,14 +212,32 @@
         const textBefore = text.substring(0, cursorPos);
         const textAfter = text.substring(cursorPos);
         
-        // Add space and suggestion
-        const newText = textBefore + ' ' + suggestion + textAfter;
+        let newText;
+        let newCursorPos;
+        
+        if (mode === 'transliterate') {
+          // Replace only the current word being typed
+          const words = textBefore.split(/[\s\n]+/);
+          const currentWord = words[words.length - 1] || '';
+          
+          // Find where the current word starts
+          const currentWordStart = textBefore.lastIndexOf(currentWord);
+          
+          // Replace current word with suggestion
+          const beforeWord = text.substring(0, currentWordStart);
+          newText = beforeWord + suggestion + textAfter;
+          newCursorPos = currentWordStart + suggestion.length;
+        } else {
+          // Auto-completion mode: add suggestion after current text
+          newText = textBefore + ' ' + suggestion + textAfter;
+          newCursorPos = textBefore.length + suggestion.length + 1;
+        }
+        
         setText(newText);
         setShowSuggestions(false);
         
         // Set cursor position after inserted text
         setTimeout(() => {
-          const newCursorPos = textBefore.length + suggestion.length + 1;
           textarea.setSelectionRange(newCursorPos, newCursorPos);
           textarea.focus();
         }, 0);
