@@ -71,6 +71,8 @@
       const [showSuggestions, setShowSuggestions] = useState(false);
       const [cursorPosition, setCursorPosition] = useState({ top: 0, left: 0 });
       const [currentMode, setCurrentMode] = useState(''); // Tracks what mode was used for current suggestions
+      const [enableTransliterate, setEnableTransliterate] = useState(true);
+      const [enableComplete, setEnableComplete] = useState(true);
       const textareaRef = useRef(null);
       const debounceTimer = useRef(null);
 
@@ -101,23 +103,23 @@
         // Get the text before the current word
         const textBeforeCurrentWord = textBeforeCursor.substring(0, textBeforeCursor.lastIndexOf(currentWord));
         
-        // Decision logic:
-        // 1. If current word is English/Latin and has at least 1 character -> transliterate
-        // 2. If current word is Bengali or empty, and there's Bengali text before -> complete
-        // 3. Otherwise, prefer transliterate for single English words
+        // Decision logic with feature flags:
+        // 1. If current word is English/Latin and has at least 1 character -> transliterate (if enabled)
+        // 2. If current word is Bengali or empty, and there's Bengali text before -> complete (if enabled)
+        // 3. Otherwise, prefer transliterate for single English words (if enabled)
         
-        if (currentWord.length >= 1 && isEnglishText(currentWord)) {
+        if (currentWord.length >= 1 && isEnglishText(currentWord) && enableTransliterate) {
           return { mode: 'transliterate', text: currentWord };
         }
         
         // Check if there's Bengali content to complete
         const hasBengaliContent = textBeforeCurrentWord.match(/[\u0980-\u09FF]/g);
-        if (hasBengaliContent && textBeforeCursor.trim().length > 2) {
+        if (hasBengaliContent && textBeforeCursor.trim().length > 2 && enableComplete) {
           return { mode: 'complete', text: inputText };
         }
         
-        // Default to transliterate if we have an English word
-        if (currentWord.length >= 1) {
+        // Default to transliterate if we have an English word and it's enabled
+        if (currentWord.length >= 1 && enableTransliterate) {
           return { mode: 'transliterate', text: currentWord };
         }
         
@@ -281,7 +283,34 @@
                 Smart Mode
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              {/* Feature Toggles */}
+              <div className="flex gap-2 mr-4 border-r border-gray-600 pr-4">
+                <button
+                  onClick={() => setEnableTransliterate(!enableTransliterate)}
+                  className={`px-3 py-1.5 rounded text-sm transition-colors flex items-center gap-2 ${
+                    enableTransliterate 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  }`}
+                  title="Toggle word-level transliteration (Banglish → Bengali)"
+                >
+                  <span className="text-xs">🔤</span>
+                  <span>Word</span>
+                </button>
+                <button
+                  onClick={() => setEnableComplete(!enableComplete)}
+                  className={`px-3 py-1.5 rounded text-sm transition-colors flex items-center gap-2 ${
+                    enableComplete 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                  }`}
+                  title="Toggle sentence-level auto-completion"
+                >
+                  <span className="text-xs">✨</span>
+                  <span>Sentence</span>
+                </button>
+              </div>
               <button
                 onClick={saveFile}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -349,15 +378,24 @@
 
           {/* Status Bar */}
           <div className="bg-gray-800 border-t border-gray-700 px-6 py-2 text-sm text-gray-400 flex items-center justify-between">
-            <div>Characters: {text.length} | Words: {text.trim().split(/\s+/).filter(Boolean).length}</div>
             <div className="flex items-center gap-4">
-              <span>UTF-8</span>
-              <span>Bengali</span>
+              <span>Characters: {text.length}</span>
+              <span>Words: {text.trim().split(/\s+/).filter(Boolean).length}</span>
               {currentMode && showSuggestions && (
                 <span className="text-green-400">
-                  Mode: {currentMode === 'transliterate' ? 'Transliterate' : 'Complete'}
+                  Mode: {currentMode === 'transliterate' ? '🔤 Transliterate' : '✨ Complete'}
                 </span>
               )}
+            </div>
+            <div className="flex items-center gap-4">
+              <span className={enableTransliterate ? 'text-blue-400' : 'text-gray-600'}>
+                Word: {enableTransliterate ? 'ON' : 'OFF'}
+              </span>
+              <span className={enableComplete ? 'text-green-400' : 'text-gray-600'}>
+                Sentence: {enableComplete ? 'ON' : 'OFF'}
+              </span>
+              <span>UTF-8</span>
+              <span>Bengali</span>
             </div>
           </div>
 
@@ -365,6 +403,9 @@
           <div className="bg-gray-800 border-t border-gray-700 px-6 py-3 text-xs text-gray-500">
             <p>
               <strong>Smart Mode:</strong> Automatically detects when to transliterate (English → Bengali) or auto-complete (Bengali text)
+            </p>
+            <p className="mt-1">
+              <strong>Features:</strong> Toggle 🔤 Word (transliteration) or ✨ Sentence (auto-completion) buttons to enable/disable features
             </p>
             <p className="mt-1">
               <strong>Shortcuts:</strong> ↑↓ Navigate | Enter/Tab: Accept | Esc: Close
