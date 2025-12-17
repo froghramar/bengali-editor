@@ -70,17 +70,20 @@
       const [selectedIndex, setSelectedIndex] = useState(0);
       const [showSuggestions, setShowSuggestions] = useState(false);
       const [cursorPosition, setCursorPosition] = useState({ top: 0, left: 0 });
+      const [mode, setMode] = useState('complete'); // 'complete' or 'transliterate'
       const textareaRef = useRef(null);
       const debounceTimer = useRef(null);
 
       // API configuration
       const API_URL = 'http://localhost:8000';
 
-      // Get completions from backend
-      const getCompletions = async (inputText) => {
+      // Get completions or transliterations from backend
+      const getSuggestions = async (inputText) => {
         setLoading(true);
         try {
-          const response = await fetch(`${API_URL}/complete`, {
+          const endpoint = mode === 'transliterate' ? '/transliterate' : '/complete';
+          
+          const response = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -99,7 +102,7 @@
           setShowSuggestions((data.suggestions || []).length > 0);
           setSelectedIndex(0);
         } catch (error) {
-          console.error('Error fetching completions:', error);
+          console.error('Error fetching suggestions:', error);
           setSuggestions([]);
           setShowSuggestions(false);
         } finally {
@@ -134,7 +137,7 @@
         // Debounce API calls (wait 500ms after user stops typing)
         if (newText.trim().length > 2) {
           debounceTimer.current = setTimeout(() => {
-            getCompletions(newText);
+            getSuggestions(newText);
           }, 500);
         } else {
           setShowSuggestions(false);
@@ -197,6 +200,30 @@
                 <FileTextIcon />
               </div>
               <h1 className="text-xl font-semibold">বাংলা টেক্সট এডিটর</h1>
+              
+              {/* Mode Switcher */}
+              <div className="ml-6 flex gap-2">
+                <button
+                  onClick={() => setMode('complete')}
+                  className={`px-3 py-1 rounded text-sm transition-colors ${
+                    mode === 'complete' 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Auto-complete
+                </button>
+                <button
+                  onClick={() => setMode('transliterate')}
+                  className={`px-3 py-1 rounded text-sm transition-colors ${
+                    mode === 'transliterate' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Banglish → Bengali
+                </button>
+              </div>
             </div>
             <div className="flex gap-2">
               <button
@@ -272,7 +299,14 @@
 
           {/* Instructions */}
           <div className="bg-gray-800 border-t border-gray-700 px-6 py-3 text-xs text-gray-500">
-            <p><strong>Keyboard Shortcuts:</strong> ↑↓ Navigate | Enter: Accept | Esc: Close</p>
+            <p>
+              <strong>Mode:</strong> {mode === 'transliterate' 
+                ? 'Banglish → Bengali (type: ami, tumi, dhaka)' 
+                : 'Auto-completion (type Bengali text)'}
+            </p>
+            <p className="mt-1">
+              <strong>Shortcuts:</strong> ↑↓ Navigate | Enter: Accept | Esc: Close
+            </p>
             <p className="mt-1"><strong>Backend:</strong> {API_URL} | Make sure backend is running!</p>
           </div>
         </div>
