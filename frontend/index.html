@@ -272,11 +272,13 @@
         
         let newText;
         let newCursorPos;
+        let originalInput;
         
         if (currentMode === 'transliterate') {
           // Replace only the current word being typed
           const words = textBefore.split(/[\s\n]+/);
           const currentWord = words[words.length - 1] || '';
+          originalInput = currentWord;
           
           // Find where the current word starts
           const currentWordStart = textBefore.lastIndexOf(currentWord);
@@ -285,10 +287,17 @@
           const beforeWord = text.substring(0, currentWordStart);
           newText = beforeWord + suggestion + textAfter;
           newCursorPos = currentWordStart + suggestion.length;
+          
+          // Save transliteration data for training
+          saveTransliterationData(originalInput, suggestion);
         } else {
           // Auto-completion mode: add suggestion after current text
+          originalInput = textBefore.trim();
           newText = textBefore + ' ' + suggestion + textAfter;
           newCursorPos = textBefore.length + suggestion.length + 1;
+          
+          // Save completion data for training
+          saveCompletionData(originalInput, suggestion);
         }
         
         setText(newText);
@@ -299,6 +308,160 @@
           textarea.setSelectionRange(newCursorPos, newCursorPos);
           textarea.focus();
         }, 0);
+      };
+
+      // Save transliteration training data
+      const saveTransliterationData = (input, output) => {
+        try {
+          // Generate hourly key: bengali_transliteration_2024-12-17T10
+          const now = new Date();
+          const hourKey = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+          const storageKey = `bengali_transliteration_${hourKey}`;
+          
+          const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          
+          const dataPoint = {
+            input: input,
+            output: output,
+            timestamp: now.toISOString(),
+            mode: 'transliterate'
+          };
+          
+          existing.push(dataPoint);
+          localStorage.setItem(storageKey, JSON.stringify(existing));
+          
+          // Also maintain an index of all keys for easy export
+          updateKeyIndex('transliteration', storageKey);
+          
+          console.log('Saved transliteration data to:', storageKey);
+        } catch (error) {
+          console.error('Error saving transliteration data:', error);
+        }
+      };
+
+      // Save completion training data
+      const saveCompletionData = (input, output) => {
+        try {
+          // Generate hourly key: bengali_completion_2024-12-17T10
+          const now = new Date();
+          const hourKey = now.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+          const storageKey = `bengali_completion_${hourKey}`;
+          
+          const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          
+          const dataPoint = {
+            input: input,
+            output: output,
+            timestamp: now.toISOString(),
+            mode: 'complete'
+          };
+          
+          existing.push(dataPoint);
+          localStorage.setItem(storageKey, JSON.stringify(existing));
+          
+          // Also maintain an index of all keys for easy export
+          updateKeyIndex('completion', storageKey);
+          
+          console.log('Saved completion data to:', storageKey);
+        } catch (error) {
+          console.error('Error saving completion data:', error);
+        }
+      };
+
+      // Maintain an index of all storage keys for easy retrieval
+      const updateKeyIndex = (type, storageKey) => {
+        try {
+          const indexKey = `bengali_${type}_keys_index`;
+          const existing = JSON.parse(localStorage.getItem(indexKey) || '[]');
+          
+          if (!existing.includes(storageKey)) {
+            existing.push(storageKey);
+            localStorage.setItem(indexKey, JSON.stringify(existing));
+          }
+        } catch (error) {
+          console.error('Error updating key index:', error);
+        }
+      };
+
+      // Get all keys for a specific type
+      const getAllKeys = (type) => {
+        try {
+          const indexKey = `bengali_${type}_keys_index`;
+          return JSON.parse(localStorage.getItem(indexKey) || '[]');
+        } catch (error) {
+          console.error('Error getting keys:', error);
+          return [];
+        }
+      };
+
+      // Export training data
+      const exportTrainingData = () => {
+        try {
+          // Get all transliteration data
+          const transliterationKeys = getAllKeys('transliteration');
+          const transliterationData = [];
+          transliterationKeys.forEach(key => {
+            const data = JSON.parse(localStorage.getItem(key) || '[]');
+            transliterationData.push(...data);
+          });
+          
+          // Get all completion data
+          const completionKeys = getAllKeys('completion');
+          const completionData = [];
+          completionKeys.forEach(key => {
+            const data = JSON.parse(localStorage.getItem(key) || '[]');
+            completionData.push(...data);
+          });
+          
+          const exportData = {
+            transliteration: transliterationData,
+            completion: completionData,
+            exported_at: new Date().toISOString(),
+            total_samples: {
+              transliteration: transliterationData.length,
+              completion: completionData.length
+            },
+            storage_keys: {
+              transliteration: transliterationKeys,
+              completion: completionKeys
+            }
+          };
+          
+          const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `bengali-training-data-${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          
+          alert(`Exported ${exportData.total_samples.transliteration} transliteration samples and ${exportData.total_samples.completion} completion samples from ${transliterationKeys.length + completionKeys.length} storage keys`);
+        } catch (error) {
+          console.error('Error exporting training data:', error);
+          alert('Error exporting training data');
+        }
+      };
+
+      // Clear training data
+      const clearTrainingData = () => {
+        if (confirm('Are you sure you want to clear all training data? This cannot be undone.')) {
+          try {
+            // Clear all transliteration keys
+            const transliterationKeys = getAllKeys('transliteration');
+            transliterationKeys.forEach(key => localStorage.removeItem(key));
+            localStorage.removeItem('bengali_transliteration_keys_index');
+            
+            // Clear all completion keys
+            const completionKeys = getAllKeys('completion');
+            completionKeys.forEach(key => localStorage.removeItem(key));
+            localStorage.removeItem('bengali_completion_keys_index');
+            
+            alert(`Cleared ${transliterationKeys.length + completionKeys.length} storage keys`);
+          } catch (error) {
+            console.error('Error clearing training data:', error);
+            alert('Error clearing training data');
+          }
+        }
       };
 
       const saveFile = () => {
@@ -352,6 +515,27 @@
                   <span>Sentence</span>
                 </button>
               </div>
+              
+              {/* Training Data Controls */}
+              <div className="flex gap-2 mr-4 border-r border-gray-600 pr-4">
+                <button
+                  onClick={exportTrainingData}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors flex items-center gap-2"
+                  title="Export training data for model training"
+                >
+                  <span className="text-xs">📊</span>
+                  <span>Export Data</span>
+                </button>
+                <button
+                  onClick={clearTrainingData}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors flex items-center gap-2"
+                  title="Clear all training data"
+                >
+                  <span className="text-xs">🗑️</span>
+                  <span>Clear</span>
+                </button>
+              </div>
+              
               <button
                 onClick={saveFile}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -446,12 +630,12 @@
               <strong>Smart Mode:</strong> Automatically detects when to transliterate (English → Bengali) or auto-complete (Bengali text)
             </p>
             <p className="mt-1">
-              <strong>Features:</strong> Toggle 🔤 Word (transliteration) or ✨ Sentence (auto-completion) buttons to enable/disable features
+              <strong>Features:</strong> Toggle 🔤 Word or ✨ Sentence | 📊 Export training data for ML models | 🗑️ Clear stored data
             </p>
             <p className="mt-1">
               <strong>Shortcuts:</strong> ↑↓ Navigate | Enter/Tab: Accept | Esc: Close
             </p>
-            <p className="mt-1"><strong>Backend:</strong> {API_URL} | Make sure backend is running!</p>
+            <p className="mt-1"><strong>Backend:</strong> {API_URL} | Accepted suggestions are saved locally for training</p>
           </div>
         </div>
       );
