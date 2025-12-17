@@ -5,3 +5,11 @@ Content-Type: application/json
 {
   "text": "আমি আজ অফিসে যেতে পারিনি কারণ"
 }
+
+### Test word autocomplete endpoint
+POST http://localhost:8000/transliterate
+Content-Type: application/json
+
+{
+  "text": "kemo"
+}
