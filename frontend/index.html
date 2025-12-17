@@ -103,26 +103,47 @@
         // Get the text before the current word
         const textBeforeCurrentWord = textBeforeCursor.substring(0, textBeforeCursor.lastIndexOf(currentWord));
         
-        // Decision logic with feature flags:
-        // 1. If current word is English/Latin and has at least 1 character -> transliterate (if enabled)
-        // 2. If current word is Bengali or empty, and there's Bengali text before -> complete (if enabled)
-        // 3. Otherwise, prefer transliterate for single English words (if enabled)
-        
-        if (currentWord.length >= 1 && isEnglishText(currentWord) && enableTransliterate) {
-          return { mode: 'transliterate', text: currentWord };
+        // If only one feature is enabled, always use that feature
+        if (enableTransliterate && !enableComplete) {
+          // Only transliterate is enabled - use it for everything
+          if (currentWord.length >= 1) {
+            return { mode: 'transliterate', text: currentWord };
+          }
+          return null;
         }
         
-        // Check if there's Bengali content to complete
-        const hasBengaliContent = textBeforeCurrentWord.match(/[\u0980-\u09FF]/g);
-        if (hasBengaliContent && textBeforeCursor.trim().length > 2 && enableComplete) {
-          return { mode: 'complete', text: inputText };
+        if (!enableTransliterate && enableComplete) {
+          // Only complete is enabled - use it for everything
+          if (textBeforeCursor.trim().length > 2) {
+            return { mode: 'complete', text: inputText };
+          }
+          return null;
         }
         
-        // Default to transliterate if we have an English word and it's enabled
-        if (currentWord.length >= 1 && enableTransliterate) {
-          return { mode: 'transliterate', text: currentWord };
+        // Both features enabled - use smart detection
+        if (enableTransliterate && enableComplete) {
+          // Decision logic:
+          // 1. If current word is English/Latin and has at least 1 character -> transliterate
+          // 2. If current word is Bengali or empty, and there's Bengali text before -> complete
+          // 3. Otherwise, prefer transliterate for single English words
+          
+          if (currentWord.length >= 1 && isEnglishText(currentWord)) {
+            return { mode: 'transliterate', text: currentWord };
+          }
+          
+          // Check if there's Bengali content to complete
+          const hasBengaliContent = textBeforeCurrentWord.match(/[\u0980-\u09FF]/g);
+          if (hasBengaliContent && textBeforeCursor.trim().length > 2) {
+            return { mode: 'complete', text: inputText };
+          }
+          
+          // Default to transliterate if we have an English word
+          if (currentWord.length >= 1) {
+            return { mode: 'transliterate', text: currentWord };
+          }
         }
         
+        // Both features disabled
         return null;
       };
 
