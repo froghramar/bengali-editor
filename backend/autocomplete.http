@@ -11,5 +11,5 @@ POST http://localhost:8000/transliterate
 Content-Type: application/json
 
 {
-  "text": "kemo"
+  "text": "am"
 }
