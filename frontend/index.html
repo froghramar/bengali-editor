@@ -70,44 +70,79 @@
       const [selectedIndex, setSelectedIndex] = useState(0);
       const [showSuggestions, setShowSuggestions] = useState(false);
       const [cursorPosition, setCursorPosition] = useState({ top: 0, left: 0 });
-      const [mode, setMode] = useState('complete'); // 'complete' or 'transliterate'
+      const [currentMode, setCurrentMode] = useState(''); // Tracks what mode was used for current suggestions
       const textareaRef = useRef(null);
       const debounceTimer = useRef(null);
 
       // API configuration
       const API_URL = 'http://localhost:8000';
 
+      // Helper function to check if text is primarily English/Latin characters
+      const isEnglishText = (str) => {
+        if (!str) return false;
+        // Count Latin alphabet characters vs Bengali characters
+        const latinChars = str.match(/[a-zA-Z]/g) || [];
+        const bengaliChars = str.match(/[\u0980-\u09FF]/g) || [];
+        
+        // If more than 70% are Latin characters, consider it English
+        return latinChars.length > bengaliChars.length && latinChars.length > str.length * 0.5;
+      };
+
+      // Intelligent mode detection
+      const detectMode = (inputText) => {
+        const textarea = textareaRef.current;
+        const cursorPos = textarea.selectionStart;
+        const textBeforeCursor = inputText.substring(0, cursorPos);
+        
+        // Extract the current word (text after last space/newline)
+        const words = textBeforeCursor.split(/[\s\n]+/);
+        const currentWord = words[words.length - 1] || '';
+        
+        // Get the text before the current word
+        const textBeforeCurrentWord = textBeforeCursor.substring(0, textBeforeCursor.lastIndexOf(currentWord));
+        
+        // Decision logic:
+        // 1. If current word is English/Latin and has at least 1 character -> transliterate
+        // 2. If current word is Bengali or empty, and there's Bengali text before -> complete
+        // 3. Otherwise, prefer transliterate for single English words
+        
+        if (currentWord.length >= 1 && isEnglishText(currentWord)) {
+          return { mode: 'transliterate', text: currentWord };
+        }
+        
+        // Check if there's Bengali content to complete
+        const hasBengaliContent = textBeforeCurrentWord.match(/[\u0980-\u09FF]/g);
+        if (hasBengaliContent && textBeforeCursor.trim().length > 2) {
+          return { mode: 'complete', text: inputText };
+        }
+        
+        // Default to transliterate if we have an English word
+        if (currentWord.length >= 1) {
+          return { mode: 'transliterate', text: currentWord };
+        }
+        
+        return null;
+      };
+
       // Get completions or transliterations from backend
       const getSuggestions = async (inputText) => {
+        const detection = detectMode(inputText);
+        
+        if (!detection) {
+          setShowSuggestions(false);
+          setSuggestions([]);
+          return;
+        }
+        
         setLoading(true);
         try {
-          const endpoint = mode === 'transliterate' ? '/transliterate' : '/complete';
-          
-          // For transliteration, only send the current word
-          let textToSend = inputText;
-          if (mode === 'transliterate') {
-            const textarea = textareaRef.current;
-            const cursorPos = textarea.selectionStart;
-            const textBeforeCursor = inputText.substring(0, cursorPos);
-            
-            // Extract the current word (text after last space/newline)
-            const words = textBeforeCursor.split(/[\s\n]+/);
-            const currentWord = words[words.length - 1] || '';
-            
-            // Only send if there's a word to transliterate
-            if (!currentWord.trim()) {
-              setLoading(false);
-              return;
-            }
-            
-            textToSend = currentWord;
-          }
+          const endpoint = detection.mode === 'transliterate' ? '/transliterate' : '/complete';
           
           const response = await fetch(`${API_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              text: textToSend,
+              text: detection.text,
               max_suggestions: 5,
               max_length: 20
             })
@@ -121,6 +156,7 @@
           setSuggestions(data.suggestions || []);
           setShowSuggestions((data.suggestions || []).length > 0);
           setSelectedIndex(0);
+          setCurrentMode(detection.mode);
         } catch (error) {
           console.error('Error fetching suggestions:', error);
           setSuggestions([]);
@@ -154,35 +190,11 @@
           });
         }
 
-        // Debounce API calls (wait 500ms after user stops typing)
+        // Debounce API calls (wait 300ms after user stops typing)
         if (newText.trim().length > 0) {
-          // For transliteration mode, check if there's a current word
-          if (mode === 'transliterate') {
-            const cursorPos = textarea.selectionStart;
-            const textBeforeCursor = newText.substring(0, cursorPos);
-            const words = textBeforeCursor.split(/[\s\n]+/);
-            const currentWord = words[words.length - 1] || '';
-            
-            // Only trigger if current word has at least 1 character
-            if (currentWord.length >= 1) {
-              debounceTimer.current = setTimeout(() => {
-                getSuggestions(newText);
-              }, 500);
-            } else {
-              setShowSuggestions(false);
-              setSuggestions([]);
-            }
-          } else {
-            // For auto-completion, need at least 2 characters
-            if (newText.trim().length > 2) {
-              debounceTimer.current = setTimeout(() => {
-                getSuggestions(newText);
-              }, 500);
-            } else {
-              setShowSuggestions(false);
-              setSuggestions([]);
-            }
-          }
+          debounceTimer.current = setTimeout(() => {
+            getSuggestions(newText);
+          }, 300);
         } else {
           setShowSuggestions(false);
           setSuggestions([]);
@@ -203,6 +215,9 @@
           applySuggestion(suggestions[selectedIndex]);
         } else if (e.key === 'Escape') {
           setShowSuggestions(false);
+        } else if (e.key === 'Tab' && showSuggestions) {
+          e.preventDefault();
+          applySuggestion(suggestions[selectedIndex]);
         }
       };
 
@@ -215,7 +230,7 @@
         let newText;
         let newCursorPos;
         
-        if (mode === 'transliterate') {
+        if (currentMode === 'transliterate') {
           // Replace only the current word being typed
           const words = textBefore.split(/[\s\n]+/);
           const currentWord = words[words.length - 1] || '';
@@ -262,30 +277,9 @@
                 <FileTextIcon />
               </div>
               <h1 className="text-xl font-semibold">বাংলা টেক্সট এডিটর</h1>
-              
-              {/* Mode Switcher */}
-              <div className="ml-6 flex gap-2">
-                <button
-                  onClick={() => setMode('complete')}
-                  className={`px-3 py-1 rounded text-sm transition-colors ${
-                    mode === 'complete' 
-                      ? 'bg-green-600 text-white' 
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Auto-complete
-                </button>
-                <button
-                  onClick={() => setMode('transliterate')}
-                  className={`px-3 py-1 rounded text-sm transition-colors ${
-                    mode === 'transliterate' 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  Banglish → Bengali
-                </button>
-              </div>
+              <span className="ml-4 px-3 py-1 bg-purple-600 text-white text-xs rounded-full">
+                Smart Mode
+              </span>
             </div>
             <div className="flex gap-2">
               <button
@@ -307,7 +301,7 @@
                   value={text}
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
-                  placeholder="বাংলায় লিখুন... (Start typing in Bengali...)"
+                  placeholder="বাংলায় লিখুন... Type in Banglish (ami, tumi) or Bengali..."
                   className="w-full h-full bg-gray-800 text-gray-100 p-4 rounded-lg border border-gray-700 focus:border-green-500 focus:outline-none resize-none text-lg"
                   style={{ fontFamily: "'Noto Sans Bengali', sans-serif" }}
                 />
@@ -323,6 +317,9 @@
                       maxWidth: '400px'
                     }}
                   >
+                    <div className="px-3 py-1 bg-gray-700 text-xs text-gray-400 border-b border-gray-600">
+                      {currentMode === 'transliterate' ? '🔤 Transliteration' : '✨ Auto-complete'}
+                    </div>
                     {suggestions.map((suggestion, index) => (
                       <div
                         key={index}
@@ -356,18 +353,21 @@
             <div className="flex items-center gap-4">
               <span>UTF-8</span>
               <span>Bengali</span>
+              {currentMode && showSuggestions && (
+                <span className="text-green-400">
+                  Mode: {currentMode === 'transliterate' ? 'Transliterate' : 'Complete'}
+                </span>
+              )}
             </div>
           </div>
 
           {/* Instructions */}
           <div className="bg-gray-800 border-t border-gray-700 px-6 py-3 text-xs text-gray-500">
             <p>
-              <strong>Mode:</strong> {mode === 'transliterate' 
-                ? 'Banglish → Bengali (type: ami, tumi, dhaka)' 
-                : 'Auto-completion (type Bengali text)'}
+              <strong>Smart Mode:</strong> Automatically detects when to transliterate (English → Bengali) or auto-complete (Bengali text)
             </p>
             <p className="mt-1">
-              <strong>Shortcuts:</strong> ↑↓ Navigate | Enter: Accept | Esc: Close
+              <strong>Shortcuts:</strong> ↑↓ Navigate | Enter/Tab: Accept | Esc: Close
             </p>
             <p className="mt-1"><strong>Backend:</strong> {API_URL} | Make sure backend is running!</p>
           </div>
