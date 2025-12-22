@@ -134,24 +134,42 @@ Format your response as a numbered list, one suggestion per line."""
         raise HTTPException(status_code=500, detail=f"Gemini completion error: {str(e)}")
 
 async def transliterate_with_gemini(input_text: str, max_suggestions: int) -> List[str]:
-    """Transliterate Banglish to Bengali using Gemini Flash model"""
+    """Transliterate Banglish to Bengali and provide autocompletion suggestions using Gemini Flash model"""
     if gemini_client is None:
         raise HTTPException(status_code=503, detail="Gemini client not initialized")
     
-    prompt = f"""You are a Banglish to Bengali transliteration assistant. Convert the following Banglish (Roman script Bengali) text to Bengali script.
+    # Check if input is already in Bengali
+    is_bengali = any('\u0980' <= char <= '\u09FF' for char in input_text)
+    
+    if is_bengali:
+        # For Bengali input, provide autocompletion suggestions
+        prompt = f"""You are a Bengali text autocompletion assistant. Given a partial Bengali word or phrase, suggest {max_suggestions} natural completions.
+
+Input (Bengali): {input_text}
+
+Provide {max_suggestions} Bengali word/phrase completion suggestions that start with or continue from the input. Return only the complete words/phrases in Bengali script.
+
+Format your response as a numbered list, one suggestion per line."""
+    else:
+        # For Banglish input, transliterate and provide autocompletion suggestions
+        prompt = f"""You are a Banglish to Bengali transliteration and autocompletion assistant. 
 
 Input (Banglish): {input_text}
 
-Provide {max_suggestions} Bengali transliteration suggestions. Return the transliterated text in Bengali script. If the input is already in Bengali, return it as-is.
+For this input, provide {max_suggestions} suggestions that include:
+1. The exact transliteration of the input to Bengali script
+2. Autocompletion suggestions - complete Bengali words/phrases that start with the transliterated partial input
 
-Format your response as a numbered list, one transliteration per line."""
+For example, if input is "am", return suggestions like: "আম", "আমি", "আমার", "আমাকে", etc.
+
+Return all suggestions in Bengali script. Format your response as a numbered list, one suggestion per line."""
     
     try:
         generation_config = {
-            'temperature': 0.3,  # Lower temperature for more consistent transliteration
+            'temperature': 0.5,  # Slightly higher for more diverse autocompletion suggestions
             'top_p': 0.95,
             'top_k': 50,
-            'max_output_tokens': 200,
+            'max_output_tokens': 300,  # Increased for more suggestions
         }
         response = gemini_client.generate_content(
             prompt,
@@ -174,20 +192,35 @@ Format your response as a numbered list, one transliteration per line."""
         lines = response_text.split('\n')
         for line in lines:
             line = line.strip()
-            # Remove numbering if present
+            # Remove numbering if present (e.g., "1. ", "1) ", "- ")
             line = re.sub(r'^\d+[\.\)]\s*', '', line)
             line = re.sub(r'^-\s*', '', line)
             line = line.strip()
             
             if line and len(line) > 0:
-                # Check if it's already in Bengali
+                # Check if it contains Bengali characters
                 if any('\u0980' <= char <= '\u09FF' for char in line):
-                    if line not in suggestions:
-                        suggestions.append(line)
+                    # Remove any English/Banglish text that might be mixed in
+                    # Extract only Bengali parts
+                    bengali_parts = re.findall(r'[\u0980-\u09FF]+', line)
+                    if bengali_parts:
+                        # Join Bengali parts and add to suggestions
+                        bengali_text = ' '.join(bengali_parts)
+                        if bengali_text and bengali_text not in suggestions:
+                            suggestions.append(bengali_text)
+                elif not is_bengali:
+                    # If input was Banglish and we got non-Bengali text, 
+                    # it might be a transliteration attempt - skip it
+                    pass
         
-        # If no suggestions found, return the input as fallback
+        # If no suggestions found, return the input as fallback (if it's already Bengali)
         if not suggestions:
-            suggestions = [input_text]
+            if is_bengali:
+                suggestions = [input_text]
+            else:
+                # For Banglish input with no suggestions, return empty list
+                # (or could try to transliterate manually, but let's keep it simple)
+                suggestions = []
         
         return suggestions[:max_suggestions]
     except Exception as e:
@@ -436,19 +469,22 @@ async def transliterate_with_transformers(input_text: str, max_suggestions: int)
 @app.post("/transliterate", response_model=CompletionResponse)
 async def transliterate_text(request: CompletionRequest):
     """
-    Transliterate Banglish (Roman/English letters) to Bengali
+    Transliterate Banglish to Bengali and provide autocompletion suggestions
     
     Uses either Gemini Flash or transformers model based on USE_GEMINI_TRANSLITERATE environment variable.
     Set USE_GEMINI_TRANSLITERATE=true to use Gemini Flash, false (default) to use transformers.
     
-    Examples:
-    - "ami" -> "আমি"
-    - "tumi kemon acho" -> "তুমি কেমন আছো"
-    - "bangla" -> "বাংলা"
+    This endpoint provides both transliteration and autocompletion:
+    - For partial Banglish input: Returns transliterated partial + autocompletion suggestions
+    - For complete Banglish input: Returns transliteration + related suggestions
+    - For partial Bengali input: Returns autocompletion suggestions
+    - For complete Bengali input: Returns the input + related suggestions
     
-    Supports both:
-    - Partial words: "am" -> ["আম", "আমি", "আমার"]
-    - Complete phrases: "ami tomake bhalobashi" -> "আমি তোমাকে ভালোবাসি"
+    Examples:
+    - "ami" -> ["আমি", "আমি তোমাকে", "আমি ভাত"]
+    - "am" -> ["আম", "আমি", "আমার", "আমাকে"]
+    - "তুমি" -> ["তুমি", "তুমি কেমন", "তুমি কেমন আছো"]
+    - "তু" -> ["তুমি", "তুমার", "তুই"]
     """
     try:
         input_text = request.text.strip()
