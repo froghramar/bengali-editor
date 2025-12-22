@@ -36,7 +36,16 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Create `backend/main.py` and `backend/requirements.txt` from the artifacts.
+**2a. Configure Environment Variables:**
+```bash
+# Copy the example .env file
+cp .env.example .env
+
+# Edit .env and add your Gemini API key (optional, only if using Gemini)
+# Get your API key from: https://makersuite.google.com/app/apikey
+```
+
+The `.env` file allows you to configure which backend to use without setting environment variables manually.
 
 **3. Setup Frontend:**
 ```bash
@@ -72,10 +81,13 @@ bengali-editor/
 ├── backend/
 │   ├── main.py              # FastAPI + AI model
 │   ├── requirements.txt
+│   ├── .env                 # Environment variables (not in git)
+│   ├── .env.example         # Example environment variables template
 │   ├── .venv/              # Virtual environment
 │   └── .gitignore
 ├── frontend/
 │   └── index.html          # React editor UI
+├── .gitignore              # Git ignore rules
 └── README.md
 ```
 
@@ -90,16 +102,127 @@ bengali-editor/
 
 ## 🔧 API Endpoints
 
-- `GET /` - Health check
+- `GET /` - Health check (shows active backend configuration)
 - `POST /complete` - Text completion
-- `POST /complete-word` - Single word completion  
+- `POST /transliterate` - Banglish to Bengali transliteration
+
+## 🤖 Backend Implementation Options
+
+The backend supports two implementations that can be easily switched:
+
+### Transformers Models (Default)
+- Uses local Hugging Face models (BLOOM-560M for completion, mBART for transliteration)
+- No API key required
+- Runs entirely on your machine
+
+### Gemini Flash Model
+- Uses Google's Gemini 2.0 Flash via API
+- Requires authentication: either `GEMINI_API_KEY` (API key) or `GOOGLE_APPLICATION_CREDENTIALS` (Vertex AI service account)
+- Faster and potentially more accurate
+- Requires internet connection
+
+### Switching Between Implementations
+
+**Recommended: Use `.env` file**
+
+The easiest way to configure the backend is using a `.env` file:
+
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cd backend
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and set your preferences:
+   
+   **For API Key authentication:**
+   ```env
+   GEMINI_API_KEY=your_api_key_here
+   USE_GEMINI_COMPLETE=false
+   USE_GEMINI_TRANSLITERATE=false
+   ```
+   
+   **For Vertex AI Service Account (if you have a JSON key file):**
+   ```env
+   GOOGLE_APPLICATION_CREDENTIALS=backend/vertex-ai-key.json
+   USE_GEMINI_COMPLETE=false
+   USE_GEMINI_TRANSLITERATE=false
+   ```
+   
+   Note: Use only ONE authentication method (either API key OR service account, not both).
+
+3. The application will automatically load these settings when it starts.
+
+**Alternative: Use environment variables directly**
+
+You can also set environment variables manually:
+
+**Use Gemini for completion only:**
+```bash
+export USE_GEMINI_COMPLETE=true
+export GEMINI_API_KEY=your_api_key_here
+uvicorn main:app --reload --port 8000
+```
+
+**Use Gemini for transliteration only:**
+```bash
+export USE_GEMINI_TRANSLITERATE=true
+export GEMINI_API_KEY=your_api_key_here
+uvicorn main:app --reload --port 8000
+```
+
+**Use Gemini for both:**
+```bash
+export USE_GEMINI_COMPLETE=true
+export USE_GEMINI_TRANSLITERATE=true
+export GEMINI_API_KEY=your_api_key_here
+uvicorn main:app --reload --port 8000
+```
+
+**Use Transformers (default):**
+```bash
+# No environment variables needed, or explicitly set:
+export USE_GEMINI_COMPLETE=false
+export USE_GEMINI_TRANSLITERATE=false
+uvicorn main:app --reload --port 8000
+```
+
+**Windows (Git Bash):**
+```bash
+export USE_GEMINI_COMPLETE=true
+export GEMINI_API_KEY=your_api_key_here
+uvicorn main:app --reload --port 8000
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:USE_GEMINI_COMPLETE="true"
+$env:GEMINI_API_KEY="your_api_key_here"
+uvicorn main:app --reload --port 8000
+```
+
+**Check active configuration:**
+```bash
+curl http://localhost:8000/
+```
+
+**Note:** Environment variables set in your shell take precedence over `.env` file values. This allows you to override `.env` settings when needed.
 
 
 **Test with curl (in Git Bash):**
+
+Completion:
 ```bash
 curl -X POST http://localhost:8000/complete \
   -H "Content-Type: application/json" \
   -d '{"text": "আমি ভাত", "max_suggestions": 5}'
+```
+
+Transliteration:
+```bash
+curl -X POST http://localhost:8000/transliterate \
+  -H "Content-Type: application/json" \
+  -d '{"text": "ami tomake bhalobashi", "max_suggestions": 3}'
 ```
 
 ## 🐛 Troubleshooting
@@ -178,6 +301,8 @@ Update `API_URL` in `index.html` to your backend domain.
 - Frontend: Update `index.html` JavaScript
 
 ### Model configuration
+
+**Transformers models:**
 Adjust in `main.py`:
 ```python
 outputs = model.generate(
@@ -186,6 +311,9 @@ outputs = model.generate(
     num_beams=10,       # Quality vs speed
 )
 ```
+
+**Gemini Flash:**
+Configure via environment variables or modify prompts in `complete_with_gemini()` and `transliterate_with_gemini()` functions.
 
 ### Caching (optional)
 ```bash
