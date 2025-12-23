@@ -1,14 +1,19 @@
 # Bengali Text Editor with AI Auto-completion
 
-A modern Bengali text editor powered by an AI language model for intelligent auto-completion and context-aware suggestions.
+A modern Bengali text editor powered by AI with intelligent auto-completion, voice input, and document analysis capabilities. Features smart transliteration, speech-to-text conversion, and image/PDF analysis using Gemini Vision.
 
 ## ✨ Features
 
 - 🤖 AI-powered auto-completion using an AI language model
-- Context-aware suggestions
-- ⌨️ Keyboard navigation (↑↓ arrows, Enter, Esc)
+- 🔤 Smart transliteration (Banglish → Bengali) with autocompletion
+- 🎤 Voice input with speech-to-text conversion (Google Cloud Speech-to-Text)
+- 📄 Image/PDF analysis with Gemini Vision (automatic image optimization)
+- 📊 Training data collection and export for ML models
+- Context-aware suggestions with intelligent mode detection
+- ⌨️ Keyboard navigation (↑↓ arrows, Enter/Tab to accept, Esc to close)
 - 💾 Save/export documents
-- 🎨 Modern dark-themed UI
+- 🎨 Modern dark-themed UI with two-column layout
+- 📑 Tabbed output panel for analysis results (HTML Preview, Summary, Extracted Text)
 
 ## 🚀 Quick Start
 
@@ -41,11 +46,16 @@ pip install -r requirements.txt
 # Copy the example .env file
 cp .env.example .env
 
-# Edit .env and add your Gemini API key (optional, only if using Gemini)
-# Get your API key from: https://makersuite.google.com/app/apikey
+# Edit .env and add your credentials (optional, only if using Gemini/Google Cloud services)
+# Get your Gemini API key from: https://makersuite.google.com/app/apikey
+# For Speech-to-Text and Vision features, you'll need Google Cloud credentials
 ```
 
 The `.env` file allows you to configure which backend to use without setting environment variables manually.
+
+**Note:** For voice input and vision analysis features, you need Google Cloud credentials:
+- Set `GOOGLE_APPLICATION_CREDENTIALS` to point to your service account JSON file
+- Or ensure Google Cloud SDK is configured with `gcloud auth application-default login`
 
 **3. Setup Frontend:**
 ```bash
@@ -79,32 +89,83 @@ python -m http.server 3000
 ```
 bengali-editor/
 ├── backend/
-│   ├── main.py              # FastAPI + AI model
+│   ├── main.py              # FastAPI application entry point
+│   ├── config.py            # Configuration and environment variables
+│   ├── schemas.py           # Pydantic models/schemas
+│   ├── utils.py             # Utility functions
 │   ├── requirements.txt
 │   ├── .env                 # Environment variables (not in git)
 │   ├── .env.example         # Example environment variables template
+│   ├── services/            # AI/ML service implementations
+│   │   ├── gemini.py        # Gemini service (completion, transliteration, vision)
+│   │   ├── transformers.py  # Transformers model service
+│   │   └── speech.py        # Google Cloud Speech-to-Text service
+│   ├── models/              # Model management
+│   │   └── loader.py        # Model loading and initialization
+│   ├── routes/              # API route handlers
+│   │   ├── complete.py      # Text completion endpoint
+│   │   ├── transliterate.py # Transliteration endpoint
+│   │   ├── speech.py        # Speech-to-text endpoint
+│   │   └── vision.py        # Vision analysis endpoint
 │   ├── .venv/              # Virtual environment
 │   └── .gitignore
 ├── frontend/
-│   └── index.html          # React editor UI
+│   ├── index.html          # Main HTML file
+│   ├── config.js           # API configuration
+│   ├── BengaliEditor.js    # Main React component
+│   ├── components/         # React components
+│   │   ├── Icons.js
+│   │   ├── Header.js
+│   │   ├── EditorArea.js
+│   │   ├── SuggestionsDropdown.js
+│   │   ├── FileUpload.js
+│   │   ├── OutputPanel.js
+│   │   ├── StatusBar.js
+│   │   └── Instructions.js
+│   ├── utils/              # Utility functions
+│   │   ├── textUtils.js
+│   │   ├── api.js
+│   │   ├── visionApi.js
+│   │   └── localStorage.js
+│   └── hooks/              # Custom hooks
+│       └── useVoiceRecording.js
 ├── .gitignore              # Git ignore rules
 └── README.md
 ```
 
 ## 🎯 Usage
 
+### Text Editing
 1. Type Bengali text (min 2 characters)
 2. Auto-completion appears automatically
 3. Use **↑↓** to navigate suggestions
-4. Press **Enter** to accept
+4. Press **Enter** or **Tab** to accept
 5. Press **Esc** to close suggestions
 6. Click **Save** to download document
+
+### Voice Input
+1. Click the **🎤 Voice** button to start recording
+2. Speak in Bengali
+3. Click again to stop recording
+4. The transcribed text will be automatically appended to your document
+
+### Image/PDF Analysis
+1. Click **📁 Upload Image/PDF** button
+2. Select an image (JPEG, PNG, GIF, WebP) or PDF file
+3. Optionally add context/prompt in the editor
+4. Click **🔍 Analyze** button
+5. View results in the right panel:
+   - **HTML Preview** tab: Structured HTML representation (default)
+   - **Summary** tab: Text summary of extracted content
+   - **Extracted Text** tab: Raw extracted text
 
 ## 🔧 API Endpoints
 
 - `GET /` - Health check (shows active backend configuration)
 - `POST /complete` - Text completion
 - `POST /transliterate` - Banglish to Bengali transliteration
+- `POST /speech-to-text` - Speech-to-text conversion (audio file → Bengali text)
+- `POST /analyze-vision` - Image/PDF analysis using Gemini Vision
 
 ## 🤖 Backend Implementation Options
 
@@ -116,10 +177,11 @@ The backend supports two implementations that can be easily switched:
 - Runs entirely on your machine
 
 ### Gemini Flash Model
-- Uses Google's Gemini 2.0 Flash via API
+- Uses Google's Gemini 2.5 Flash via API
 - Requires authentication: either `GEMINI_API_KEY` (API key) or `GOOGLE_APPLICATION_CREDENTIALS` (Vertex AI service account)
 - Faster and potentially more accurate
 - Requires internet connection
+- Supports vision analysis for images and PDFs
 
 ### Switching Between Implementations
 
@@ -225,6 +287,13 @@ curl -X POST http://localhost:8000/transliterate \
   -d '{"text": "ami tomake bhalobashi", "max_suggestions": 3}'
 ```
 
+Vision Analysis:
+```bash
+curl -X POST http://localhost:8000/analyze-vision \
+  -F "file=@path/to/image.jpg" \
+  -F "prompt=Extract all text from this document"
+```
+
 ## 🐛 Troubleshooting
 
 ### Backend won't start
@@ -271,6 +340,29 @@ python --version
 echo "alias python3=python" >> ~/.bashrc
 ```
 
+### Voice input not working
+```bash
+# Check browser permissions for microphone
+# Ensure HTTPS or localhost (browsers require secure context for microphone access)
+# Check backend logs for Google Cloud Speech-to-Text errors
+# Verify GOOGLE_APPLICATION_CREDENTIALS is set correctly
+```
+
+### Vision analysis fails
+```bash
+# Ensure Pillow and pdf2image are installed
+pip install Pillow pdf2image
+
+# For PDF support, you may need poppler:
+# Windows: Download from https://github.com/oschwartz10612/poppler-windows/releases
+# Add poppler/bin to PATH
+# Linux: sudo apt-get install poppler-utils
+# Mac: brew install poppler
+
+# Check Gemini API quota/limits
+# Verify image file size (automatically optimized, but very large files may still fail)
+```
+
 ## 🚀 Production Deployment
 
 ### Backend
@@ -296,9 +388,26 @@ Update `API_URL` in `index.html` to your backend domain.
 
 ## 🎓 Development Notes
 
+### Code Structure
+The project uses a modular architecture:
+
+**Backend:**
+- `main.py` - FastAPI app setup and route registration
+- `services/` - Business logic for AI/ML services
+- `routes/` - API endpoint handlers
+- `models/` - Model loading and management
+- `config.py` - Configuration management
+- `schemas.py` - Pydantic models
+
+**Frontend:**
+- `BengaliEditor.js` - Main React component
+- `components/` - Reusable UI components
+- `utils/` - Utility functions and API calls
+- `hooks/` - Custom React hooks
+
 ### Adding new features
-- Backend: Modify `main.py` endpoints
-- Frontend: Update `index.html` JavaScript
+- Backend: Add service in `services/`, route in `routes/`, update `main.py`
+- Frontend: Create component in `components/`, add utility in `utils/` if needed
 
 ### Model configuration
 
@@ -329,6 +438,8 @@ Areas for improvement:
 - Mobile app
 - VS Code extension
 - Fine-tune model on domain-specific text
+- Multi-page PDF support
+- Image annotation features
 
 ## 📄 License
 
