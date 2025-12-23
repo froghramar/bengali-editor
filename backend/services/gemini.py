@@ -29,10 +29,10 @@ def initialize_gemini_client():
         # Set the environment variable for Google auth libraries
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_APPLICATION_CREDENTIALS
         logger.info(f"Using Vertex AI service account: {GOOGLE_APPLICATION_CREDENTIALS}")
-        gemini_client = genai.GenerativeModel('gemini-2.0-flash')
+        gemini_client = genai.GenerativeModel('gemini-2.5-flash')
     elif GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
-        gemini_client = genai.GenerativeModel('gemini-2.0-flash')
+        gemini_client = genai.GenerativeModel('gemini-2.5-flash')
         logger.info("Using Gemini API key authentication")
     else:
         logger.warning("Neither GEMINI_API_KEY nor GOOGLE_APPLICATION_CREDENTIALS is set.")
