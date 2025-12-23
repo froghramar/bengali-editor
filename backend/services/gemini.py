@@ -240,11 +240,31 @@ Format your response as JSON with these keys:
         
         # Handle different file types
         if file_type.startswith('image/'):
-            # For images, use PIL to process and convert to base64
+            # For images, use PIL to process and resize if needed
             image = Image.open(io.BytesIO(file_content))
             
-            # Convert image to PNG format
-            img_byte_arr = io.BytesIO()
+            # Resize image if it's too large to reduce file size and processing time
+            # Gemini Vision works well with images up to 2048x2048 pixels
+            MAX_DIMENSION = 2048
+            original_size = image.size
+            width, height = original_size
+            
+            # Calculate if resizing is needed
+            if width > MAX_DIMENSION or height > MAX_DIMENSION:
+                # Maintain aspect ratio
+                if width > height:
+                    new_width = MAX_DIMENSION
+                    new_height = int(height * (MAX_DIMENSION / width))
+                else:
+                    new_height = MAX_DIMENSION
+                    new_width = int(width * (MAX_DIMENSION / height))
+                
+                # Resize with high-quality resampling
+                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                logger.info(f"Resized image from {original_size} to {(new_width, new_height)}")
+            else:
+                logger.info(f"Image size {original_size} is within limits, no resizing needed")
+            
             # Convert to RGB if necessary (for JPEG compatibility)
             if image.mode in ('RGBA', 'LA', 'P'):
                 rgb_image = Image.new('RGB', image.size, (255, 255, 255))
@@ -253,8 +273,13 @@ Format your response as JSON with these keys:
                 rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
                 image = rgb_image
             
-            image.save(img_byte_arr, format='PNG')
+            # Save as PNG with optimization
+            img_byte_arr = io.BytesIO()
+            # Use optimize=True to reduce file size
+            image.save(img_byte_arr, format='PNG', optimize=True)
             img_byte_arr = img_byte_arr.getvalue()
+            
+            logger.info(f"Processed image size: {len(img_byte_arr)} bytes")
             
             # Use Gemini Vision API - pass image directly
             import google.generativeai.types as types
@@ -274,15 +299,38 @@ Format your response as JSON with these keys:
                 from pdf2image import convert_from_bytes
                 import base64
                 
-                # Convert PDF pages to images
+                # Convert PDF pages to images (use lower DPI to reduce size)
+                # 200 DPI is good balance between quality and file size
                 images = convert_from_bytes(file_content, dpi=200)
                 
                 # Process first page (or combine multiple pages)
                 if images:
-                    # Convert first page to PNG
+                    pdf_image = images[0]
+                    
+                    # Resize PDF image if too large (same as regular images)
+                    MAX_DIMENSION = 2048
+                    original_size = pdf_image.size
+                    width, height = original_size
+                    
+                    if width > MAX_DIMENSION or height > MAX_DIMENSION:
+                        # Maintain aspect ratio
+                        if width > height:
+                            new_width = MAX_DIMENSION
+                            new_height = int(height * (MAX_DIMENSION / width))
+                        else:
+                            new_height = MAX_DIMENSION
+                            new_width = int(width * (MAX_DIMENSION / height))
+                        
+                        # Resize with high-quality resampling
+                        pdf_image = pdf_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                        logger.info(f"Resized PDF image from {original_size} to {(new_width, new_height)}")
+                    
+                    # Convert to PNG with optimization
                     img_byte_arr = io.BytesIO()
-                    images[0].save(img_byte_arr, format='PNG')
+                    pdf_image.save(img_byte_arr, format='PNG', optimize=True)
                     img_byte_arr = img_byte_arr.getvalue()
+                    
+                    logger.info(f"Processed PDF image size: {len(img_byte_arr)} bytes")
                     
                     # Update prompt if multiple pages
                     if len(images) > 1:
