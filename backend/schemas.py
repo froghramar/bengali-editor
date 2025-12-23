@@ -19,3 +19,13 @@ class CompletionResponse(BaseModel):
 class SpeechToTextResponse(BaseModel):
     text: str
     confidence: float = 0.0
+
+
+class VisionAnalysisRequest(BaseModel):
+    prompt: str = ""  # Optional prompt/context from editor
+
+
+class VisionAnalysisResponse(BaseModel):
+    summary: str
+    html_output: str
+    extracted_text: str = ""

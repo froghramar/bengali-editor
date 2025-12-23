@@ -2,13 +2,14 @@
 Bengali Text Auto-completion Backend - Main Application
 """
 import logging
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from models.loader import load_models, get_models
 from routes.complete import get_completions
 from routes.transliterate import transliterate_text
 from routes.speech import speech_to_text as speech_to_text_handler
-from schemas import CompletionRequest, CompletionResponse, SpeechToTextResponse
+from routes.vision import analyze_file as analyze_file_handler
+from schemas import CompletionRequest, CompletionResponse, SpeechToTextResponse, VisionAnalysisResponse
 from config import USE_GEMINI_COMPLETE, USE_GEMINI_TRANSLITERATE
 
 # Configure logging
@@ -64,6 +65,15 @@ async def transliterate_endpoint(request: CompletionRequest):
 async def speech_to_text_endpoint(audio: UploadFile = File(...)):
     """Convert speech audio to text using Google Cloud Speech-to-Text API"""
     return await speech_to_text_handler(audio)
+
+
+@app.post("/analyze-vision", response_model=VisionAnalysisResponse)
+async def analyze_vision_endpoint(
+    file: UploadFile = File(...),
+    prompt: str = Form("")
+):
+    """Analyze image or PDF file using Gemini Vision model"""
+    return await analyze_file_handler(file, prompt)
 
 
 if __name__ == "__main__":

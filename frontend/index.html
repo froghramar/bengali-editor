@@ -58,6 +58,12 @@
     window.apiUtils = { getSuggestions, sendAudioToBackend };
   </script>
 
+  <script src="utils/visionApi.js"></script>
+  <script>
+    // Expose vision API utilities to global scope
+    window.visionApi = { analyzeVision };
+  </script>
+
   <script src="utils/localStorage.js"></script>
   <script>
     // Expose localStorage utilities to global scope
@@ -78,6 +84,8 @@
 
   <!-- Components -->
   <script type="text/babel" src="components/SuggestionsDropdown.js"></script>
+  <script type="text/babel" src="components/FileUpload.js"></script>
+  <script type="text/babel" src="components/OutputPanel.js"></script>
   <script type="text/babel" src="components/Header.js"></script>
   <script type="text/babel" src="components/EditorArea.js"></script>
   <script type="text/babel" src="components/StatusBar.js"></script>

@@ -13,6 +13,9 @@ const BengaliEditor = () => {
   const [enableComplete, setEnableComplete] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
   
   const textareaRef = useRef(null);
   const debounceTimer = useRef(null);
@@ -164,6 +167,20 @@ const BengaliEditor = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleAnalyze = async () => {
+    if (!selectedFile) return;
+    
+    if (window.visionApi && window.visionApi.analyzeVision) {
+      await window.visionApi.analyzeVision(
+        selectedFile,
+        text, // Use editor text as prompt/context
+        window.API_URL,
+        setIsAnalyzing,
+        setAnalysisResult
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
       <Header
@@ -179,20 +196,43 @@ const BengaliEditor = () => {
         saveFile={saveFile}
       />
 
-      <EditorArea
-        text={text}
-        handleTextChange={handleTextChange}
-        handleKeyDown={handleKeyDown}
-        textareaRef={textareaRef}
-        showSuggestions={showSuggestions}
-        suggestions={suggestions}
-        selectedIndex={selectedIndex}
-        currentMode={currentMode}
-        cursorPosition={cursorPosition}
-        applySuggestion={applySuggestion}
-        loading={loading}
-        isRecording={isRecording}
-      />
+      {/* Two-column layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left column - Editor */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-gray-700">
+            <FileUpload
+              onFileSelect={setSelectedFile}
+              selectedFile={selectedFile}
+              onAnalyze={handleAnalyze}
+              isAnalyzing={isAnalyzing}
+            />
+          </div>
+          
+          <EditorArea
+            text={text}
+            handleTextChange={handleTextChange}
+            handleKeyDown={handleKeyDown}
+            textareaRef={textareaRef}
+            showSuggestions={showSuggestions}
+            suggestions={suggestions}
+            selectedIndex={selectedIndex}
+            currentMode={currentMode}
+            cursorPosition={cursorPosition}
+            applySuggestion={applySuggestion}
+            loading={loading}
+            isRecording={isRecording}
+          />
+        </div>
+
+        {/* Right column - Output Panel */}
+        <div className="w-1/2 border-l border-gray-700">
+          <OutputPanel
+            analysisResult={analysisResult}
+            isLoading={isAnalyzing}
+          />
+        </div>
+      </div>
 
       <StatusBar
         text={text}

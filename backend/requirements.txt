@@ -13,3 +13,5 @@ pybind11>=2.12
 google-generativeai==0.8.6
 google-cloud-speech==2.21.0
 python-dotenv>=1.0.0
+Pillow>=10.0.0
+pdf2image>=1.16.0

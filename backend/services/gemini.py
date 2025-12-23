@@ -199,3 +199,154 @@ Return all suggestions in Bengali script. Format your response as a numbered lis
     except Exception as e:
         logger.error(f"Error with Gemini transliteration: {e}")
         raise HTTPException(status_code=500, detail=f"Gemini transliteration error: {str(e)}")
+
+
+async def analyze_vision(file_content: bytes, file_type: str, prompt: str = "") -> dict:
+    """
+    Analyze image or PDF using Gemini Vision model
+    
+    Args:
+        file_content: Binary content of the uploaded file
+        file_type: MIME type of the file (image/* or application/pdf)
+        prompt: Optional prompt/context from the editor
+        
+    Returns:
+        dict with summary, html_output, and extracted_text
+    """
+    if gemini_client is None:
+        raise HTTPException(status_code=503, detail="Gemini client not initialized")
+    
+    try:
+        import base64
+        from PIL import Image
+        import io
+        
+        # Prepare the prompt
+        base_prompt = """Analyze this image/PDF and provide:
+1. A detailed text summary of what you see and extract
+2. An HTML preview that represents the content in a structured, readable format
+
+If this is a document, extract the text and structure it properly in HTML.
+If this is an image, describe what you see and create an HTML representation.
+
+Format your response as JSON with these keys:
+- "summary": A detailed text summary
+- "html_output": HTML code that previews the content
+- "extracted_text": Raw text extracted from the document (if applicable)
+"""
+        
+        if prompt:
+            base_prompt += f"\n\nAdditional context from user: {prompt}\n\nPlease incorporate this context into your analysis."
+        
+        # Handle different file types
+        if file_type.startswith('image/'):
+            # For images, use PIL to process and convert to base64
+            image = Image.open(io.BytesIO(file_content))
+            
+            # Convert image to PNG format
+            img_byte_arr = io.BytesIO()
+            # Convert to RGB if necessary (for JPEG compatibility)
+            if image.mode in ('RGBA', 'LA', 'P'):
+                rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                if image.mode == 'P':
+                    image = image.convert('RGBA')
+                rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                image = rgb_image
+            
+            image.save(img_byte_arr, format='PNG')
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            # Use Gemini Vision API - pass image directly
+            import google.generativeai.types as types
+            
+            # Create image part
+            image_part = {
+                "mime_type": "image/png",
+                "data": img_byte_arr
+            }
+            
+            response = gemini_client.generate_content(
+                [base_prompt, image_part]
+            )
+        elif file_type == 'application/pdf':
+            # For PDFs, convert pages to images
+            try:
+                from pdf2image import convert_from_bytes
+                import base64
+                
+                # Convert PDF pages to images
+                images = convert_from_bytes(file_content, dpi=200)
+                
+                # Process first page (or combine multiple pages)
+                if images:
+                    # Convert first page to PNG
+                    img_byte_arr = io.BytesIO()
+                    images[0].save(img_byte_arr, format='PNG')
+                    img_byte_arr = img_byte_arr.getvalue()
+                    
+                    # Update prompt if multiple pages
+                    if len(images) > 1:
+                        base_prompt += f"\n\nNote: This PDF has {len(images)} pages. Analyzing the first page."
+                    
+                    # Create image part
+                    image_part = {
+                        "mime_type": "image/png",
+                        "data": img_byte_arr
+                    }
+                    
+                    response = gemini_client.generate_content(
+                        [base_prompt, image_part]
+                    )
+                else:
+                    raise HTTPException(status_code=400, detail="Could not process PDF file")
+            except ImportError:
+                raise HTTPException(
+                    status_code=500,
+                    detail="PDF processing requires pdf2image library. Please install it: pip install pdf2image"
+                )
+            except Exception as e:
+                logger.error(f"Error processing PDF: {e}")
+                raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
+        
+        # Parse response
+        try:
+            response_text = response.text.strip()
+        except ValueError as e:
+            logger.error(f"Gemini response blocked or invalid: {e}")
+            if hasattr(response, 'candidates') and response.candidates:
+                response_text = response.candidates[0].content.parts[0].text.strip()
+            else:
+                raise HTTPException(status_code=500, detail=f"Gemini response error: {str(e)}")
+        
+        # Try to parse JSON response
+        import json
+        try:
+            # Remove markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.split('```')[1]
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+            
+            result = json.loads(response_text)
+            
+            # Ensure all required fields exist
+            return {
+                "summary": result.get("summary", response_text),
+                "html_output": result.get("html_output", f"<div>{result.get('summary', response_text)}</div>"),
+                "extracted_text": result.get("extracted_text", "")
+            }
+        except json.JSONDecodeError:
+            # If not JSON, treat entire response as summary
+            logger.warning("Response was not JSON, treating as plain text")
+            return {
+                "summary": response_text,
+                "html_output": f"<div class='p-4'><p>{response_text}</p></div>",
+                "extracted_text": response_text
+            }
+        
+    except Exception as e:
+        logger.error(f"Error with Gemini vision analysis: {e}")
+        raise HTTPException(status_code=500, detail=f"Vision analysis error: {str(e)}")
