@@ -63,6 +63,15 @@
       </svg>
     );
 
+    const MicrophoneIcon = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </svg>
+    );
+
     const BengaliEditor = () => {
       const [text, setText] = useState('');
       const [suggestions, setSuggestions] = useState([]);
@@ -73,9 +82,13 @@
       const [currentMode, setCurrentMode] = useState(''); // Tracks what mode was used for current suggestions
       const [enableTransliterate, setEnableTransliterate] = useState(true);
       const [enableComplete, setEnableComplete] = useState(true);
+      const [isRecording, setIsRecording] = useState(false);
+      const [isProcessingVoice, setIsProcessingVoice] = useState(false);
       const textareaRef = useRef(null);
       const debounceTimer = useRef(null);
       const abortController = useRef(null);
+      const mediaRecorderRef = useRef(null);
+      const audioChunksRef = useRef([]);
 
       // API configuration
       const API_URL = 'http://localhost:8000';
@@ -474,6 +487,107 @@
         URL.revokeObjectURL(url);
       };
 
+      // Voice recording functions
+      const startRecording = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/webm;codecs=opus'
+          });
+          
+          audioChunksRef.current = [];
+          
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+          
+          mediaRecorder.onstop = async () => {
+            // Stop all tracks to release microphone
+            stream.getTracks().forEach(track => track.stop());
+            
+            // Create audio blob
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            
+            // Send to backend for transcription
+            await sendAudioToBackend(audioBlob);
+          };
+          
+          mediaRecorderRef.current = mediaRecorder;
+          mediaRecorder.start();
+          setIsRecording(true);
+        } catch (error) {
+          console.error('Error starting recording:', error);
+          alert('Could not access microphone. Please check permissions.');
+        }
+      };
+
+      const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+        }
+      };
+
+      const sendAudioToBackend = async (audioBlob) => {
+        setIsProcessingVoice(true);
+        try {
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'recording.webm');
+          
+          const response = await fetch(`${API_URL}/speech-to-text`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(errorData.detail || 'Failed to transcribe audio');
+          }
+          
+          const data = await response.json();
+          
+          if (data.text) {
+            // Append transcribed text to the textarea at cursor position
+            const textarea = textareaRef.current;
+            const cursorPos = textarea.selectionStart;
+            const textBefore = text.substring(0, cursorPos);
+            const textAfter = text.substring(cursorPos);
+            
+            // Add space before if there's text before cursor
+            const spaceBefore = textBefore.trim().length > 0 ? ' ' : '';
+            // Add space after if there's text after cursor
+            const spaceAfter = textAfter.trim().length > 0 ? ' ' : '';
+            
+            const newText = textBefore + spaceBefore + data.text + spaceAfter + textAfter;
+            setText(newText);
+            
+            // Set cursor position after inserted text
+            const newCursorPos = cursorPos + spaceBefore.length + data.text.length + spaceAfter.length;
+            setTimeout(() => {
+              textarea.setSelectionRange(newCursorPos, newCursorPos);
+              textarea.focus();
+            }, 0);
+          } else {
+            alert('No text was transcribed from the audio.');
+          }
+        } catch (error) {
+          console.error('Error sending audio to backend:', error);
+          alert(`Error transcribing audio: ${error.message}`);
+        } finally {
+          setIsProcessingVoice(false);
+        }
+      };
+
+      const toggleRecording = () => {
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
+      };
+
       return (
         <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
           {/* Header */}
@@ -537,6 +651,22 @@
               </div>
               
               <button
+                onClick={toggleRecording}
+                disabled={isProcessingVoice}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  isRecording
+                    ? 'bg-red-600 hover:bg-red-700 animate-pulse'
+                    : isProcessingVoice
+                    ? 'bg-gray-600 cursor-not-allowed'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+                title={isRecording ? 'Click to stop recording' : 'Click to start voice input'}
+              >
+                <MicrophoneIcon />
+                {isRecording ? 'Recording...' : isProcessingVoice ? 'Processing...' : 'Voice'}
+              </button>
+              
+              <button
                 onClick={saveFile}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
               >
@@ -597,6 +727,14 @@
                     <span className="text-sm">Loading...</span>
                   </div>
                 )}
+
+                {/* Recording Indicator */}
+                {isRecording && (
+                  <div className="absolute top-4 right-4 bg-red-600 px-3 py-2 rounded-lg flex items-center gap-2 animate-pulse">
+                    <div className="w-3 h-3 bg-white rounded-full"></div>
+                    <span className="text-sm text-white">Recording...</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -636,6 +774,7 @@
               <strong>Shortcuts:</strong> ↑↓ Navigate | Enter/Tab: Accept | Esc: Close
             </p>
             <p className="mt-1"><strong>Backend:</strong> {API_URL} | Accepted suggestions are saved locally for training</p>
+            <p className="mt-1"><strong>Voice Input:</strong> Click the 🎤 Voice button to record speech. The audio will be converted to Bengali text and appended to your document.</p>
           </div>
         </div>
       );

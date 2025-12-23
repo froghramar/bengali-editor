@@ -2,7 +2,7 @@
 Bengali Text Auto-completion Backend
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForCausalLM, MBartForConditionalGeneration, MBart50TokenizerFast
@@ -13,6 +13,8 @@ import re
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
+from google.cloud import speech
+import io
 
 # Load environment variables from .env file
 load_dotenv()
@@ -54,6 +56,9 @@ transliteration_tokenizer = None
 # Gemini client
 gemini_client = None
 
+# Speech-to-Text client
+speech_client = None
+
 class CompletionRequest(BaseModel):
     text: str
     max_suggestions: int = 5
@@ -62,6 +67,10 @@ class CompletionRequest(BaseModel):
 class CompletionResponse(BaseModel):
     suggestions: List[str]
     input_text: str
+
+class SpeechToTextResponse(BaseModel):
+    text: str
+    confidence: float = 0.0
 
 def normalize_bengali_text(text):
     """
@@ -233,6 +242,7 @@ async def load_model():
     global model, tokenizer, device
     global transliteration_model, transliteration_tokenizer
     global gemini_client
+    global speech_client
     
     try:
         # Initialize Gemini if needed
@@ -261,6 +271,33 @@ async def load_model():
                 raise ValueError("Gemini authentication not configured")
             
             logger.info("Gemini Flash model initialized successfully!")
+        
+        # Initialize Google Cloud Speech-to-Text client
+        try:
+            # Use the same credentials as Gemini (GOOGLE_APPLICATION_CREDENTIALS)
+            if GOOGLE_APPLICATION_CREDENTIALS and os.path.exists(GOOGLE_APPLICATION_CREDENTIALS):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_APPLICATION_CREDENTIALS
+                speech_client = speech.SpeechClient()
+                logger.info("Google Cloud Speech-to-Text client initialized successfully!")
+            elif GEMINI_API_KEY:
+                # Try to initialize with API key (though Speech-to-Text typically uses service account)
+                # For API key, we might need to use a different approach
+                logger.warning("Speech-to-Text typically requires service account credentials (GOOGLE_APPLICATION_CREDENTIALS)")
+                logger.warning("Attempting to initialize with default credentials...")
+                try:
+                    speech_client = speech.SpeechClient()
+                    logger.info("Google Cloud Speech-to-Text client initialized with default credentials!")
+                except Exception as e:
+                    logger.warning(f"Could not initialize Speech-to-Text client: {e}")
+                    logger.warning("Speech-to-Text endpoint will not be available")
+                    speech_client = None
+            else:
+                logger.warning("Google Cloud Speech-to-Text not configured. Set GOOGLE_APPLICATION_CREDENTIALS to enable.")
+                speech_client = None
+        except Exception as e:
+            logger.warning(f"Could not initialize Speech-to-Text client: {e}")
+            logger.warning("Speech-to-Text endpoint will not be available")
+            speech_client = None
             if USE_GEMINI_COMPLETE:
                 logger.info("Using Gemini Flash for /complete endpoint")
             if USE_GEMINI_TRANSLITERATE:
@@ -508,6 +545,115 @@ async def transliterate_text(request: CompletionRequest):
     except Exception as e:
         logger.error(f"Error in transliteration: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/speech-to-text", response_model=SpeechToTextResponse)
+async def speech_to_text(audio: UploadFile = File(...)):
+    """
+    Convert speech audio to text using Google Cloud Speech-to-Text API
+    
+    Accepts audio file (WAV, FLAC, MP3, etc.) and returns transcribed text in Bengali.
+    Supports Bengali language (bn-BD or bn-IN).
+    
+    Args:
+        audio: Audio file to transcribe
+        
+    Returns:
+        SpeechToTextResponse with transcribed text and confidence score
+    """
+    if speech_client is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="Speech-to-Text service not available. Please configure GOOGLE_APPLICATION_CREDENTIALS."
+        )
+    
+    try:
+        # Read audio file content
+        audio_content = await audio.read()
+        
+        # Determine audio encoding from file extension or content type
+        file_extension = audio.filename.split('.')[-1].lower() if audio.filename else 'webm'
+        content_type = audio.content_type or ''
+        
+        # Map file extensions and content types to encoding
+        encoding_map = {
+            'wav': speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            'flac': speech.RecognitionConfig.AudioEncoding.FLAC,
+            'mp3': speech.RecognitionConfig.AudioEncoding.MP3,
+            'ogg': speech.RecognitionConfig.AudioEncoding.OGG_OPUS,
+            'webm': speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+        }
+        
+        # Also check content type
+        if 'webm' in content_type.lower():
+            encoding = speech.RecognitionConfig.AudioEncoding.WEBM_OPUS
+        elif 'wav' in content_type.lower() or 'wave' in content_type.lower():
+            encoding = speech.RecognitionConfig.AudioEncoding.LINEAR16
+        elif 'flac' in content_type.lower():
+            encoding = speech.RecognitionConfig.AudioEncoding.FLAC
+        elif 'mp3' in content_type.lower() or 'mpeg' in content_type.lower():
+            encoding = speech.RecognitionConfig.AudioEncoding.MP3
+        elif 'ogg' in content_type.lower():
+            encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+        else:
+            encoding = encoding_map.get(file_extension, speech.RecognitionConfig.AudioEncoding.WEBM_OPUS)
+        
+        # Configure recognition
+        # For WebM/Opus, we don't need to specify sample_rate_hertz
+        # For other formats, we'll use a common rate or let the API auto-detect
+        config_params = {
+            'language_code': "bn-BD",  # Bengali (Bangladesh), can also use "bn-IN" for Bengali (India)
+            'enable_automatic_punctuation': True,
+            'model': "latest_long",  # Use latest long-form model for better accuracy
+        }
+        
+        # Only set encoding and sample_rate for formats that require it
+        if encoding != speech.RecognitionConfig.AudioEncoding.WEBM_OPUS:
+            config_params['encoding'] = encoding
+            config_params['sample_rate_hertz'] = 16000  # Common sample rate
+        else:
+            config_params['encoding'] = encoding
+        
+        config = speech.RecognitionConfig(**config_params)
+        
+        audio_data = speech.RecognitionAudio(content=audio_content)
+        
+        # Perform the transcription
+        response = speech_client.recognize(config=config, audio=audio_data)
+        
+        # Extract transcribed text
+        transcribed_text = ""
+        confidence_sum = 0.0
+        result_count = 0
+        
+        for result in response.results:
+            alternative = result.alternatives[0]
+            transcribed_text += alternative.transcript + " "
+            if hasattr(alternative, 'confidence') and alternative.confidence:
+                confidence_sum += alternative.confidence
+                result_count += 1
+        
+        # Calculate average confidence
+        avg_confidence = confidence_sum / result_count if result_count > 0 else 0.0
+        
+        # Clean up the text
+        transcribed_text = transcribed_text.strip()
+        
+        if not transcribed_text:
+            raise HTTPException(
+                status_code=400,
+                detail="No speech detected in the audio file. Please check the audio quality and language."
+            )
+        
+        logger.info(f"Transcribed audio: '{transcribed_text[:50]}...' (confidence: {avg_confidence:.2f})")
+        
+        return SpeechToTextResponse(
+            text=transcribed_text,
+            confidence=avg_confidence
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in speech-to-text: {e}")
+        raise HTTPException(status_code=500, detail=f"Speech-to-text error: {str(e)}")
 
 
 if __name__ == "__main__":
