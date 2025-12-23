@@ -46,4 +46,6 @@ Thumbs.db
 
 # Model cache (Hugging Face)
 .cache/
+# Exclude model cache directories but not backend/models/ code directory
 models/
+!backend/models/
